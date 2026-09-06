@@ -1,0 +1,9 @@
+{
+  "name": "component",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "dependencies": {
+    "swiper": "11.2.0"
+  }
+}
