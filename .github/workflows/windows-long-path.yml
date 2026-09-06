@@ -10,7 +10,7 @@ permissions:
 jobs:
   verify:
     name: ${{ matrix.case }}
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -48,24 +48,51 @@ jobs:
         env:
           RSPACK_VERSION: ${{ matrix.rspack }}
           RSBUILD_VERSION: ${{ matrix.rsbuild }}
+          EXPECTED: ${{ matrix.expected }}
         run: |
+          # Match a default Windows installation, where Win32 long paths are disabled.
+          # Newly spawned Node.js processes observe this registry value.
+          Set-ItemProperty `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+            -Name LongPathsEnabled `
+            -Value 0
+
+          $sourceRepo = "C:\rspack-repro"
           $segments = (1..18 | ForEach-Object { "0123456789" }) -join "\"
-          $deepRoot = "C:\$segments"
+          $deepRoot = Join-Path $sourceRepo $segments
           $appPath = Join-Path $deepRoot "app"
 
-          New-Item -ItemType Directory -Force -Path $deepRoot | Out-Null
-          Copy-Item -Path "$env:GITHUB_WORKSPACE\fixture\*" -Destination $deepRoot -Recurse -Force
+          git -c core.longpaths=true clone `
+            --depth 1 `
+            --branch bug-repro `
+            https://github.com/Xellon/rspack-repro.git `
+            $sourceRepo
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloning the original reproduction failed."
+          }
 
-          $packagePath = Join-Path $appPath "package.json"
-          $packageJson = Get-Content $packagePath -Raw
-          $packageJson = $packageJson.Replace("__RSPACK_VERSION__", $env:RSPACK_VERSION)
-          $packageJson = $packageJson.Replace("__RSBUILD_VERSION__", $env:RSBUILD_VERSION)
-          Set-Content -Path $packagePath -Value $packageJson -Encoding utf8NoBOM
+          # Preserve the original package.json and lockfile for the legacy case.
+          # Current cases update only the three packages under test.
+          if ($env:EXPECTED -eq "success") {
+            $packagePath = Join-Path $appPath "package.json"
+            $packageJson = Get-Content $packagePath -Raw | ConvertFrom-Json
+            $packageJson.dependencies.'@rspack/cli' = $env:RSPACK_VERSION
+            $packageJson.dependencies.'@rspack/core' = $env:RSPACK_VERSION
+            $packageJson.devDependencies.'@rsbuild/core' = $env:RSBUILD_VERSION
+            $packageJson | ConvertTo-Json -Depth 20 | Set-Content -Path $packagePath -Encoding utf8NoBOM
+          }
 
           "DEEP_ROOT=$deepRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_PATH=$appPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           $longPaths = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem").LongPathsEnabled
+          Write-Host "Windows: $([Environment]::OSVersion.VersionString)"
+          Write-Host "LongPathsEnabled: $longPaths"
+          Write-Host "App path length: $($appPath.Length)"
+          Write-Host "App path: $appPath"
+          node --version
+          pnpm --version
+
           "Windows: $([Environment]::OSVersion.VersionString)" >> $env:GITHUB_STEP_SUMMARY
           "LongPathsEnabled: $longPaths" >> $env:GITHUB_STEP_SUMMARY
           "App path length: $($appPath.Length)" >> $env:GITHUB_STEP_SUMMARY
@@ -73,9 +100,15 @@ jobs:
 
       - name: Install dependencies
         shell: pwsh
+        env:
+          EXPECTED: ${{ matrix.expected }}
         run: |
           Push-Location $env:DEEP_ROOT
-          pnpm install --no-frozen-lockfile
+          if ($env:EXPECTED -eq "panic") {
+            pnpm install --frozen-lockfile
+          } else {
+            pnpm install --no-frozen-lockfile
+          }
           $installExitCode = $LASTEXITCODE
           Pop-Location
 
