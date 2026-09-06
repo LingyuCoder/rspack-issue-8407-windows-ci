@@ -20,14 +20,27 @@ jobs:
             rspack: "1.1.8"
             rsbuild: "1.1.13"
             expected: panic
+            long-paths-enabled: "0"
           - case: latest-v1
             rspack: "1.7.12"
             rsbuild: "1.7.6"
             expected: success
+            long-paths-enabled: "0"
           - case: current-v2
             rspack: "2.2.2"
             rsbuild: "2.2.3"
             expected: success
+            long-paths-enabled: "0"
+          - case: latest-v1-long-paths-enabled
+            rspack: "1.7.12"
+            rsbuild: "1.7.6"
+            expected: success
+            long-paths-enabled: "1"
+          - case: current-v2-long-paths-enabled
+            rspack: "2.2.2"
+            rsbuild: "2.2.3"
+            expected: success
+            long-paths-enabled: "1"
 
     steps:
       - name: Check out repository
@@ -49,13 +62,13 @@ jobs:
           RSPACK_VERSION: ${{ matrix.rspack }}
           RSBUILD_VERSION: ${{ matrix.rsbuild }}
           EXPECTED: ${{ matrix.expected }}
+          LONG_PATHS_ENABLED: ${{ matrix.long-paths-enabled }}
         run: |
-          # Match a default Windows installation, where Win32 long paths are disabled.
           # Newly spawned Node.js processes observe this registry value.
           Set-ItemProperty `
             -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
             -Name LongPathsEnabled `
-            -Value 0
+            -Value ([int]$env:LONG_PATHS_ENABLED)
 
           $sourceRepo = "C:\rspack-repro"
           $segments = (1..18 | ForEach-Object { "0123456789" }) -join "\"
@@ -105,9 +118,9 @@ jobs:
         run: |
           Push-Location $env:DEEP_ROOT
           if ($env:EXPECTED -eq "panic") {
-            pnpm install --frozen-lockfile
+            pnpm install --frozen-lockfile --ignore-scripts
           } else {
-            pnpm install --no-frozen-lockfile
+            pnpm install --no-frozen-lockfile --ignore-scripts
           }
           $installExitCode = $LASTEXITCODE
           Pop-Location
