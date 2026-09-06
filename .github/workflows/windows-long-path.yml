@@ -164,38 +164,47 @@ jobs:
             throw "pnpm install failed with exit code $installExitCode"
           }
 
-      - name: Build and verify expected result
+      - name: Run build
+        id: build
+        continue-on-error: true
         shell: pwsh
         env:
-          EXPECTED: ${{ matrix.expected }}
           CASE_NAME: ${{ matrix.case }}
         run: |
           $logPath = Join-Path $env:RUNNER_TEMP "$env:CASE_NAME.log"
 
           Push-Location $env:APP_PATH
-          $previousErrorPreference = $ErrorActionPreference
-          $ErrorActionPreference = "Continue"
           pnpm exec rsbuild build *>&1 | Tee-Object -FilePath $logPath
-          $buildExitCode = $LASTEXITCODE
-          $ErrorActionPreference = $previousErrorPreference
-          Pop-Location
+
+      - name: Verify expected result
+        if: always()
+        shell: pwsh
+        env:
+          EXPECTED: ${{ matrix.expected }}
+          CASE_NAME: ${{ matrix.case }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP "$env:CASE_NAME.log"
+          if (-not (Test-Path $logPath)) {
+            throw "The build did not produce a log."
+          }
 
           $log = Get-Content $logPath -Raw
           $panicked = $log -match "Panic occurred at runtime|Message:\s+should have module|should have module.*execute\.rs"
 
-          "Build exit code: $buildExitCode" >> $env:GITHUB_STEP_SUMMARY
+          "Build outcome: $env:BUILD_OUTCOME" >> $env:GITHUB_STEP_SUMMARY
           "Detected reported panic: $panicked" >> $env:GITHUB_STEP_SUMMARY
 
           if ($env:EXPECTED -eq "panic") {
-            if ($buildExitCode -eq 0) {
+            if ($env:BUILD_OUTCOME -ne "failure") {
               throw "Legacy Rspack unexpectedly succeeded, so this environment did not reproduce issue #8407."
             }
             if (-not $panicked) {
               throw "Legacy Rspack failed, but did not reproduce the reported 'should have module' panic."
             }
           } else {
-            if ($buildExitCode -ne 0) {
-              throw "Current Rspack failed with exit code $buildExitCode."
+            if ($env:BUILD_OUTCOME -ne "success") {
+              throw "Current Rspack failed to build."
             }
             if ($panicked) {
               throw "Current Rspack emitted the reported panic despite returning success."
