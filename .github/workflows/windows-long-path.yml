@@ -17,47 +17,68 @@ jobs:
       matrix:
         include:
           - case: legacy-repro
+            node: "20.20.2"
             rspack: "1.1.8"
             rsbuild: "1.1.13"
             expected: panic
             long-paths-enabled: "0"
             path-mode: deep
           - case: latest-v1-deep
+            node: "20.20.2"
             rspack: "1.7.12"
             rsbuild: "1.7.6"
             expected: success
             long-paths-enabled: "0"
             path-mode: deep
           - case: current-v2-deep
+            node: "20.20.2"
             rspack: "2.2.2"
             rsbuild: "2.2.3"
             expected: success
             long-paths-enabled: "0"
             path-mode: deep
           - case: latest-v1-deep-long-paths-enabled
+            node: "20.20.2"
             rspack: "1.7.12"
             rsbuild: "1.7.6"
             expected: success
             long-paths-enabled: "1"
             path-mode: deep
           - case: current-v2-deep-long-paths-enabled
+            node: "20.20.2"
             rspack: "2.2.2"
             rsbuild: "2.2.3"
             expected: success
             long-paths-enabled: "1"
             path-mode: deep
           - case: latest-v1-shallow-control
+            node: "20.20.2"
             rspack: "1.7.12"
             rsbuild: "1.7.6"
             expected: success
             long-paths-enabled: "0"
             path-mode: shallow
           - case: current-v2-shallow-control
+            node: "20.20.2"
             rspack: "2.2.2"
             rsbuild: "2.2.3"
             expected: success
             long-paths-enabled: "0"
             path-mode: shallow
+          - case: current-v2-deep-node-22-9
+            node: "22.9.0"
+            rspack: "2.2.2"
+            rsbuild: "2.2.3"
+            expected: success
+            long-paths-enabled: "1"
+            path-mode: deep
+          - case: current-v2-deep-node-24
+            node: "24"
+            rspack: "2.2.2"
+            rsbuild: "2.2.3"
+            expected: success
+            long-paths-enabled: "1"
+            path-mode: deep
 
     steps:
       - name: Check out repository
@@ -71,7 +92,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
 
       - name: Create the long-path reproduction
         shell: pwsh
