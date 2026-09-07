@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LingyuCoder/rspack
-          ref: f06a6d1c12e9cfd23ad07687fab8f86df474acd5
+          ref: 20598d8ea93e578f93d22512d3fd7bb8506de36e
           path: rspack
 
       - name: Set up pnpm
