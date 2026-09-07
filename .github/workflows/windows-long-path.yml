@@ -79,6 +79,22 @@ jobs:
             expected: success
             long-paths-enabled: "1"
             path-mode: deep
+          - case: current-v2-deep-symlinks-false
+            node: "24"
+            rspack: "2.2.2"
+            rsbuild: "2.2.3"
+            expected: success
+            long-paths-enabled: "1"
+            path-mode: deep
+            workaround: symlinks-false
+          - case: current-v2-deep-hoisted
+            node: "24"
+            rspack: "2.2.2"
+            rsbuild: "2.2.3"
+            expected: success
+            long-paths-enabled: "1"
+            path-mode: deep
+            install-mode: hoisted
 
     steps:
       - name: Check out repository
@@ -102,6 +118,7 @@ jobs:
           EXPECTED: ${{ matrix.expected }}
           LONG_PATHS_ENABLED: ${{ matrix.long-paths-enabled }}
           PATH_MODE: ${{ matrix.path-mode }}
+          WORKAROUND: ${{ matrix.workaround }}
         run: |
           # Newly spawned Node.js processes observe this registry value.
           Set-ItemProperty `
@@ -147,6 +164,28 @@ jobs:
             $packageJson | ConvertTo-Json -Depth 20 | Set-Content -Path $packagePath -Encoding utf8NoBOM
           }
 
+          if ($env:WORKAROUND -eq "symlinks-false") {
+            $rsbuildConfigPath = Join-Path $appPath "rsbuild.config.ts"
+            @'
+          import { defineConfig } from "@rsbuild/core";
+
+          export default defineConfig({
+            output: {
+              distPath: {
+                root: "./rsbuild-dist",
+              },
+            },
+            tools: {
+              rspack: {
+                resolve: {
+                  symlinks: false,
+                },
+              },
+            },
+          });
+          '@ | Set-Content -Path $rsbuildConfigPath -Encoding utf8NoBOM
+          }
+
           "PROJECT_ROOT=$projectRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_PATH=$appPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -171,10 +210,13 @@ jobs:
         shell: pwsh
         env:
           EXPECTED: ${{ matrix.expected }}
+          INSTALL_MODE: ${{ matrix.install-mode }}
         run: |
           Push-Location $env:PROJECT_ROOT
           if ($env:EXPECTED -eq "panic") {
             pnpm install --frozen-lockfile --ignore-scripts
+          } elseif ($env:INSTALL_MODE -eq "hoisted") {
+            pnpm install --no-frozen-lockfile --ignore-scripts --config.node-linker=hoisted
           } else {
             pnpm install --no-frozen-lockfile --ignore-scripts
           }
