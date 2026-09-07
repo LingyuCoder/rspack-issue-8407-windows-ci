@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LingyuCoder/rspack
-          ref: seal/fix-windows-long-path
+          ref: 27c387400196282d14fdcba36d260dc4505064f4
           path: rspack
 
       - name: Set up pnpm
