@@ -33,6 +33,12 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rspack -> target
+          cache-on-failure: true
+
       - name: Install Rspack dependencies
         working-directory: rspack
         run: pnpm install --frozen-lockfile
@@ -86,8 +92,17 @@ jobs:
           $packageJson.devDependencies.'@rsbuild/core' = "2.2.3"
           $packageJson | ConvertTo-Json -Depth 20 | Set-Content -Path $packagePath -Encoding utf8NoBOM
 
+          # Rsbuild resolves @rspack/core from its own package location. Force
+          # every workspace dependency edge to the patched checkout, not only
+          # the app's direct dependency.
+          $workspacePath = Join-Path $projectRoot "pnpm-workspace.yaml"
+          $workspaceYaml = (Get-Content $workspacePath -Raw).TrimEnd()
+          $workspaceYaml += "`n`noverrides:`n  '@rspack/core': link:$rspackCore`n"
+          Set-Content -Path $workspacePath -Value $workspaceYaml -Encoding utf8NoBOM
+
           "PROJECT_ROOT=$projectRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_PATH=$appPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PATCHED_RSPACK_CORE=$rspackCore" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           Write-Host "Patched Rspack: $rspackCore"
           Write-Host "App path length: $($appPath.Length)"
@@ -102,6 +117,21 @@ jobs:
           Pop-Location
           if ($installExitCode -ne 0) {
             throw "pnpm install failed with exit code $installExitCode"
+          }
+
+          Push-Location $env:APP_PATH
+          $resolvedCore = node -e @'
+          const path = require('node:path');
+          const { createRequire } = require('node:module');
+          const rsbuildEntry = require.resolve('@rsbuild/core');
+          process.stdout.write(createRequire(rsbuildEntry).resolve('@rspack/core'));
+          '@
+          Pop-Location
+          $resolvedCore = (Resolve-Path $resolvedCore).Path.Replace("\", "/")
+          $expectedCore = "$env:PATCHED_RSPACK_CORE/dist/index.js"
+          Write-Host "Rsbuild resolves @rspack/core to: $resolvedCore"
+          if ($resolvedCore -ne $expectedCore) {
+            throw "Rsbuild did not resolve the patched @rspack/core. Expected $expectedCore"
           }
 
       - name: Build the original reproduction with patched Rspack
