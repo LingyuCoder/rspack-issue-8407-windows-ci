@@ -28,7 +28,7 @@ See the [controlled GitHub Actions run](https://github.com/LingyuCoder/rspack-is
 
 ## Diagnosis
 
-With `resolve.symlinks` enabled, Rspack canonicalizes pnpm's `node_modules/swiper` symlink to its physical `.pnpm` target. The resulting `swiper.css` path is longer than 260 characters, so [`dunce::canonicalize`](https://github.com/kornelski/dunce/blob/1.0.5/src/lib.rs#L151-L180) correctly retains Windows' extended-length path prefix: `\\?\C:\...`.
+With `resolve.symlinks` enabled, Rspack canonicalizes pnpm's `node_modules/swiper` symlink to its physical `.pnpm` target. The resulting `swiper.css` path is longer than 260 characters, so [`dunce::canonicalize`](https://gitlab.com/kornelski/dunce/-/blob/v1.0.5/src/lib.rs#L151-180) correctly retains Windows' extended-length path prefix: `\\?\C:\...`.
 
 Rspack then passes that path through request/resource parsers where `?` normally starts a resource query. The current [JavaScript resource parser](https://github.com/web-infra-dev/rspack/blob/7c1c826b7f5dc13cfd6fd77cccd501663e4f24b8/packages/rspack/src/util/identifier.ts#L304-L341), [Rust loader resource parser](https://github.com/web-infra-dev/rspack/blob/7c1c826b7f5dc13cfd6fd77cccd501663e4f24b8/crates/rspack_loader_runner/src/loader.rs#L301-L334), and [native resolver specifier parser](https://github.com/web-infra-dev/rspack/blob/7c1c826b7f5dc13cfd6fd77cccd501663e4f24b8/crates/rspack_resolver/src/specifier.rs#L22-L101) do not special-case the namespace marker. They therefore parse `\\?\C:\...\swiper.css` as path `\\` plus query `?\C:\...\swiper.css`. This explains the observed resolution context of `\` exactly.
 
