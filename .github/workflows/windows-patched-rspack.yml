@@ -1,0 +1,112 @@
+name: Windows patched Rspack verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out patched Rspack
+        uses: actions/checkout@v4
+        with:
+          repository: LingyuCoder/rspack
+          ref: seal/fix-windows-long-path
+          path: rspack
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Rspack dependencies
+        working-directory: rspack
+        run: pnpm install --frozen-lockfile
+
+      - name: Build patched Rspack
+        working-directory: rspack
+        run: pnpm run build:cli:dev
+
+      - name: Test DOS device path parsers
+        working-directory: rspack
+        run: |
+          cargo test -p rspack_loader_runner --test parse_resource
+          cargo test -p rspack_resolver --test integration_test windows_dos_device_paths -- --exact
+
+      - name: Test the Windows DOS device path integration case
+        working-directory: rspack/tests/rspack-test
+        run: pnpm run test:base -t "configCases/loader/windows-dos-device-path"
+
+      - name: Create the original long-path reproduction
+        shell: pwsh
+        run: |
+          Set-ItemProperty `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+            -Name LongPathsEnabled `
+            -Value 1
+
+          $sourceRepo = "C:\rspack-repro"
+          $segments = (1..18 | ForEach-Object { "0123456789" }) -join "\"
+          $projectRoot = Join-Path $sourceRepo $segments
+          $appPath = Join-Path $projectRoot "app"
+
+          git -c core.longpaths=true clone `
+            --depth 1 `
+            --branch bug-repro `
+            https://github.com/Xellon/rspack-repro.git `
+            $sourceRepo
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloning the original reproduction failed."
+          }
+
+          $fixtureCommit = git -C $sourceRepo rev-parse HEAD
+          if ($fixtureCommit -ne "60b30536941b5ac572b573da4de18317f583a498") {
+            throw "The reproduction branch moved: $fixtureCommit"
+          }
+
+          $rspackCore = (Resolve-Path "$env:GITHUB_WORKSPACE\rspack\packages\rspack").Path.Replace("\", "/")
+          $packagePath = Join-Path $appPath "package.json"
+          $packageJson = Get-Content $packagePath -Raw | ConvertFrom-Json
+          $packageJson.dependencies.'@rspack/cli' = "2.2.2"
+          $packageJson.dependencies.'@rspack/core' = "link:$rspackCore"
+          $packageJson.devDependencies.'@rsbuild/core' = "2.2.3"
+          $packageJson | ConvertTo-Json -Depth 20 | Set-Content -Path $packagePath -Encoding utf8NoBOM
+
+          "PROJECT_ROOT=$projectRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_PATH=$appPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          Write-Host "Patched Rspack: $rspackCore"
+          Write-Host "App path length: $($appPath.Length)"
+          Write-Host "App path: $appPath"
+
+      - name: Install reproduction dependencies
+        shell: pwsh
+        run: |
+          Push-Location $env:PROJECT_ROOT
+          pnpm install --no-frozen-lockfile --ignore-scripts
+          $installExitCode = $LASTEXITCODE
+          Pop-Location
+          if ($installExitCode -ne 0) {
+            throw "pnpm install failed with exit code $installExitCode"
+          }
+
+      - name: Build the original reproduction with patched Rspack
+        shell: pwsh
+        run: |
+          Push-Location $env:APP_PATH
+          pnpm exec rsbuild build
+          $buildExitCode = $LASTEXITCODE
+          Pop-Location
+          if ($buildExitCode -ne 0) {
+            throw "The patched Rspack build failed with exit code $buildExitCode"
+          }
