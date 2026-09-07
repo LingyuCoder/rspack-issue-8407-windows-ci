@@ -17,10 +17,14 @@ The controlled run on Windows Server 2022 used the original 18-level fixture, pi
 | 20.20.2 | 2.2.2 / 2.2.3 | deep | 0 or 1 | Fails without a panic |
 | 22.9.0 | 2.2.2 / 2.2.3 | deep | 1 | Fails without a panic |
 | 24.20.0 | 2.2.2 / 2.2.3 | deep | 1 | Fails without a panic |
+| 24.20.0 | 2.2.2 / 2.2.3 | deep, `resolve.symlinks=false` | 1 | Passes |
+| 24.20.0 | 2.2.2 / 2.2.3 | deep, pnpm hoisted install | 1 | Passes |
 
 The current releases fail while resolving the long `swiper.css` path, followed by a `cssExtractLoader` error. Enabling the Windows `LongPathsEnabled` registry policy does not change the result. Node 22.9 and Node 24 produce the same error as Node 20, so the Node.js long-path fixes in [nodejs/node#50753](https://github.com/nodejs/node/issues/50753) and [nodejs/node#54304](https://github.com/nodejs/node/issues/54304) do not fix this Rspack reproduction. The matching shallow-path controls pass, so the failure is specific to the deep-path setup rather than the fixture or dependency installation.
 
-See the [controlled GitHub Actions run](https://github.com/LingyuCoder/rspack-issue-8407-windows-ci/actions/runs/34076101292) and its uploaded build logs. The overall run is intentionally red because current Rspack is required to complete the deep-path build successfully.
+Two causal controls pass with the same deep project directory: disabling Rspack symlink resolution (`resolve.symlinks=false`) and installing dependencies with pnpm's hoisted node linker. Both prevent the resolved `swiper.css` path from expanding through pnpm's long `.pnpm` target, which confirms that the failure is triggered by Rspack canonicalizing the symlink to an extended-length Windows path.
+
+See the [controlled GitHub Actions run](https://github.com/LingyuCoder/rspack-issue-8407-windows-ci/actions/runs/34076946377) and its uploaded build logs. The overall run is intentionally red because current Rspack is required to complete the unmodified deep-path build successfully.
 
 ## What the workflow does
 
