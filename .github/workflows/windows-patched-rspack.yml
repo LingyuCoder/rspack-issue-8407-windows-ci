@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LingyuCoder/rspack
-          ref: 27c387400196282d14fdcba36d260dc4505064f4
+          ref: 0deeb63152f7a10c0d654c86f57ece1785f78170
           path: rspack
 
       - name: Set up pnpm
@@ -47,15 +47,15 @@ jobs:
         working-directory: rspack
         run: pnpm run build:cli:dev
 
-      - name: Test DOS device path parsers
+      - name: Test DOS device path resolver
         working-directory: rspack
-        run: |
-          cargo test -p rspack_loader_runner --test parse_resource
-          cargo test -p rspack_resolver --test integration_test windows_dos_device_paths -- --exact
+        run: cargo test -p rspack_resolver --test integration_test windows_dos_device_paths -- --exact
 
-      - name: Test the Windows DOS device path integration case
+      - name: Test Windows DOS device path integration cases
         working-directory: rspack/tests/rspack-test
-        run: pnpm run test:base -t "configCases/loader/windows-dos-device-path"
+        run: |
+          pnpm run test:base -t "configCases/loader/dos-device-resource"
+          pnpm run test:base -t "configCases/loader/windows-dos-device-path"
 
       - name: Create the original long-path reproduction
         shell: pwsh
