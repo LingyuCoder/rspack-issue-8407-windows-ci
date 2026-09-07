@@ -26,6 +26,14 @@ Two causal controls pass with the same deep project directory: disabling Rspack 
 
 See the [controlled GitHub Actions run](https://github.com/LingyuCoder/rspack-issue-8407-windows-ci/actions/runs/34076946377) and its uploaded build logs. The overall run is intentionally red because current Rspack is required to complete the unmodified deep-path build successfully.
 
+## Diagnosis
+
+With `resolve.symlinks` enabled, Rspack canonicalizes pnpm's `node_modules/swiper` symlink to its physical `.pnpm` target. The resulting `swiper.css` path is longer than 260 characters, so [`dunce::canonicalize`](https://github.com/kornelski/dunce/blob/1.0.5/src/lib.rs#L151-L180) correctly retains Windows' extended-length path prefix: `\\?\C:\...`.
+
+Rspack then passes that path through request/resource parsers where `?` normally starts a resource query. The current [JavaScript resource parser](https://github.com/web-infra-dev/rspack/blob/7c1c826b7f5dc13cfd6fd77cccd501663e4f24b8/packages/rspack/src/util/identifier.ts#L304-L341), [Rust loader resource parser](https://github.com/web-infra-dev/rspack/blob/7c1c826b7f5dc13cfd6fd77cccd501663e4f24b8/crates/rspack_loader_runner/src/loader.rs#L301-L334), and [native resolver specifier parser](https://github.com/web-infra-dev/rspack/blob/7c1c826b7f5dc13cfd6fd77cccd501663e4f24b8/crates/rspack_resolver/src/specifier.rs#L22-L101) do not special-case the namespace marker. They therefore parse `\\?\C:\...\swiper.css` as path `\\` plus query `?\C:\...\swiper.css`. This explains the observed resolution context of `\` exactly.
+
+The proposed fix is to preserve the `\\?\` prefix for filesystem I/O while making all three parsers skip its namespace-marker `?` when looking for a real resource query. The same behavior should cover `\\?\UNC\server\share\...`, and the Windows absolute-path/contextification helpers should recognize both extended path forms. A separate error-propagation fix should ensure that a failed `importModule` factorization reaches the loader callback as an error instead of returning `undefined` and producing the secondary `cssExtractLoader` `__esModule` exception.
+
 ## What the workflow does
 
 The workflow clones the original reproduction, verifies its pinned commit, installs dependencies with pnpm, and runs `rsbuild build` on GitHub's `windows-2022` runner. It includes deep-path tests with the Windows long-path policy both disabled and enabled, plus shallow-path controls using the same source files and package versions.
