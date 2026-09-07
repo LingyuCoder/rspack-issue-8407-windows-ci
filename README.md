@@ -8,17 +8,19 @@ This repository verifies [web-infra-dev/rspack#8407](https://github.com/web-infr
 
 The controlled run on Windows Server 2022 used the original 18-level fixture, pinned at commit [`60b3053`](https://github.com/Xellon/rspack-repro/commit/60b30536941b5ac572b573da4de18317f583a498). The app directory is 217 characters long before pnpm adds its nested dependency paths.
 
-| Rspack / Rsbuild | Location | `LongPathsEnabled` | Result |
-| --- | --- | ---: | --- |
-| 1.1.8 / 1.1.13 | deep | 0 | Reproduces `should have module` panic |
-| 1.7.12 / 1.7.6 | shallow | 0 | Passes |
-| 1.7.12 / 1.7.6 | deep | 0 or 1 | Fails without a panic |
-| 2.2.2 / 2.2.3 | shallow | 0 | Passes |
-| 2.2.2 / 2.2.3 | deep | 0 or 1 | Fails without a panic |
+| Node | Rspack / Rsbuild | Location | `LongPathsEnabled` | Result |
+| --- | --- | --- | ---: | --- |
+| 20.20.2 | 1.1.8 / 1.1.13 | deep | 0 | Reproduces `should have module` panic |
+| 20.20.2 | 1.7.12 / 1.7.6 | shallow | 0 | Passes |
+| 20.20.2 | 1.7.12 / 1.7.6 | deep | 0 or 1 | Fails without a panic |
+| 20.20.2 | 2.2.2 / 2.2.3 | shallow | 0 | Passes |
+| 20.20.2 | 2.2.2 / 2.2.3 | deep | 0 or 1 | Fails without a panic |
+| 22.9.0 | 2.2.2 / 2.2.3 | deep | 1 | Fails without a panic |
+| 24.20.0 | 2.2.2 / 2.2.3 | deep | 1 | Fails without a panic |
 
-The current releases fail while resolving the long `swiper.css` path, followed by a `cssExtractLoader` error. Enabling the Windows `LongPathsEnabled` registry policy does not change the result. The matching shallow-path controls pass, so the failure is specific to the deep-path setup rather than the fixture or dependency installation.
+The current releases fail while resolving the long `swiper.css` path, followed by a `cssExtractLoader` error. Enabling the Windows `LongPathsEnabled` registry policy does not change the result. Node 22.9 and Node 24 produce the same error as Node 20, so the Node.js long-path fixes in [nodejs/node#50753](https://github.com/nodejs/node/issues/50753) and [nodejs/node#54304](https://github.com/nodejs/node/issues/54304) do not fix this Rspack reproduction. The matching shallow-path controls pass, so the failure is specific to the deep-path setup rather than the fixture or dependency installation.
 
-See the [controlled GitHub Actions run](https://github.com/LingyuCoder/rspack-issue-8407-windows-ci/actions/runs/34044179625) and its uploaded build logs. The overall run is intentionally red because current Rspack is required to complete the deep-path build successfully.
+See the [controlled GitHub Actions run](https://github.com/LingyuCoder/rspack-issue-8407-windows-ci/actions/runs/34076101292) and its uploaded build logs. The overall run is intentionally red because current Rspack is required to complete the deep-path build successfully.
 
 ## What the workflow does
 
